@@ -247,7 +247,6 @@ class _ObjectDetectionViewState extends State<ObjectDetectionView> {
     if (_interpreter == null || _isDetecting) return;
     
     _isDetecting = true;
-    print("--> Trying to process a frame...");
     
     final recognitions = await compute(
       runModelOnIsolate,
@@ -258,8 +257,6 @@ class _ObjectDetectionViewState extends State<ObjectDetectionView> {
         _modelInputSize,
       ),
     );
-    
-    print("--> Model processed. Found ${recognitions.length} recognitions.");
     
     if (mounted) {
       setState(() {
@@ -280,16 +277,18 @@ class _ObjectDetectionViewState extends State<ObjectDetectionView> {
             return ErrorApp("Gagal menginisialisasi: ${snapshot.error}");
           }
           
+          final size = MediaQuery.of(context).size;
+          
           return Scaffold(
             appBar: AppBar(title: const Text('Deteksi Fraksi Sawit')),
             body: Stack(
-              fit: StackFit.expand,
               children: [
                 CameraPreview(_cameraController!),
                 CustomPaint(
                   painter: BoundingBoxPainter(
                     recognitions: _recognitions,
-                    modelInputSize: _modelInputSize,
+                    previewSize: _cameraController!.value.previewSize!,
+                    screenSize: size,
                   ),
                 ),
               ],
@@ -307,29 +306,39 @@ class _ObjectDetectionViewState extends State<ObjectDetectionView> {
 
 class BoundingBoxPainter extends CustomPainter {
   final List<Map<String, dynamic>> recognitions;
-  final int modelInputSize;
+  final Size previewSize;
+  final Size screenSize;
 
-  BoundingBoxPainter({required this.recognitions, required this.modelInputSize});
+  BoundingBoxPainter({
+    required this.recognitions,
+    required this.previewSize,
+    required this.screenSize,
+  });
 
   @override
   void paint(Canvas canvas, Size size) {
     if (recognitions.isEmpty) return;
-    final double scaleX = size.width / modelInputSize;
-    final double scaleY = size.height / modelInputSize;
 
+    final double scaleX = screenSize.width / previewSize.height;
+    final double scaleY = screenSize.height / previewSize.width;
+    
     for (var rec in recognitions) {
       final rect = rec['rect'] as Rect;
+
       final scaledRect = Rect.fromLTRB(
+        (1 - rect.bottom) * scaleY,
         rect.left * scaleX,
-        rect.top * scaleY,
+        (1 - rect.top) * scaleY,
         rect.right * scaleX,
-        rect.bottom * scaleY,
       );
+
       final paint = Paint()
         ..style = PaintingStyle.stroke
         ..strokeWidth = 2.0
         ..color = Colors.lightGreenAccent;
+
       canvas.drawRect(scaledRect, paint);
+
       final textPainter = TextPainter(
         text: TextSpan(
           text: '${rec['label']} ${(rec['score'] * 100).toStringAsFixed(0)}%',
