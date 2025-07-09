@@ -208,7 +208,7 @@ class _ObjectDetectionViewState extends State<ObjectDetectionView> {
   late Future<void> _initializeControllerFuture;
   final int _modelInputSize = 640;
   int frameCounter = 0;
-  final int frameSkipRate = 5;
+  final int frameSkipRate = 15;
 
   @override
   void initState() {
@@ -221,7 +221,7 @@ class _ObjectDetectionViewState extends State<ObjectDetectionView> {
     if (!mounted) return;
     final labelsData = await DefaultAssetBundle.of(context).loadString('assets/labels.txt');
     _labels = labelsData.split('\n').where((label) => label.isNotEmpty).toList();
-    _cameraController = CameraController(widget.camera, ResolutionPreset.medium, enableAudio: false);
+    _cameraController = CameraController(widget.camera, ResolutionPreset.low, enableAudio: false);
     await _cameraController!.initialize();
     if (mounted) {
       _cameraController?.startImageStream((CameraImage image) {
