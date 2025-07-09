@@ -247,6 +247,7 @@ class _ObjectDetectionViewState extends State<ObjectDetectionView> {
     if (_interpreter == null || _isDetecting) return;
     
     _isDetecting = true;
+    print("--> Trying to process a frame...");
     
     final recognitions = await compute(
       runModelOnIsolate,
@@ -257,6 +258,9 @@ class _ObjectDetectionViewState extends State<ObjectDetectionView> {
         _modelInputSize,
       ),
     );
+    
+    print("--> Model processed. Found ${recognitions.length} recognitions.");
+    
     if (mounted) {
       setState(() {
         _recognitions = recognitions;
@@ -275,23 +279,17 @@ class _ObjectDetectionViewState extends State<ObjectDetectionView> {
           if (snapshot.hasError) {
             return ErrorApp("Gagal menginisialisasi: ${snapshot.error}");
           }
-          final screenSize = MediaQuery.of(context).size;
+          
           return Scaffold(
             appBar: AppBar(title: const Text('Deteksi Fraksi Sawit')),
             body: Stack(
               fit: StackFit.expand,
               children: [
-                Transform.scale(
-                  scale: 1 / (_cameraController!.value.aspectRatio / screenSize.aspectRatio),
-                  alignment: Alignment.topCenter,
-                  child: CameraPreview(_cameraController!),
-                ),
+                CameraPreview(_cameraController!),
                 CustomPaint(
                   painter: BoundingBoxPainter(
                     recognitions: _recognitions,
                     modelInputSize: _modelInputSize,
-                    screenSize: screenSize,
-                    previewSize: _cameraController!.value.previewSize!,
                   ),
                 ),
               ],
@@ -310,22 +308,14 @@ class _ObjectDetectionViewState extends State<ObjectDetectionView> {
 class BoundingBoxPainter extends CustomPainter {
   final List<Map<String, dynamic>> recognitions;
   final int modelInputSize;
-  final Size screenSize;
-  final Size previewSize;
 
-  BoundingBoxPainter({
-    required this.recognitions,
-    required this.modelInputSize,
-    required this.screenSize,
-    required this.previewSize,
-  });
+  BoundingBoxPainter({required this.recognitions, required this.modelInputSize});
 
   @override
   void paint(Canvas canvas, Size size) {
     if (recognitions.isEmpty) return;
-
-    final double scaleX = screenSize.width / modelInputSize;
-    final double scaleY = screenSize.height / modelInputSize;
+    final double scaleX = size.width / modelInputSize;
+    final double scaleY = size.height / modelInputSize;
 
     for (var rec in recognitions) {
       final rect = rec['rect'] as Rect;
@@ -335,14 +325,11 @@ class BoundingBoxPainter extends CustomPainter {
         rect.right * scaleX,
         rect.bottom * scaleY,
       );
-
       final paint = Paint()
         ..style = PaintingStyle.stroke
         ..strokeWidth = 2.0
         ..color = Colors.lightGreenAccent;
-
       canvas.drawRect(scaledRect, paint);
-
       final textPainter = TextPainter(
         text: TextSpan(
           text: '${rec['label']} ${(rec['score'] * 100).toStringAsFixed(0)}%',
