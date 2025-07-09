@@ -207,6 +207,8 @@ class _ObjectDetectionViewState extends State<ObjectDetectionView> {
   List<Map<String, dynamic>> _recognitions = [];
   late Future<void> _initializeControllerFuture;
   final int _modelInputSize = 640;
+  int frameCounter = 0;
+  final int frameSkipRate = 5;
 
   @override
   void initState() {
@@ -223,9 +225,13 @@ class _ObjectDetectionViewState extends State<ObjectDetectionView> {
     await _cameraController!.initialize();
     if (mounted) {
       _cameraController?.startImageStream((CameraImage image) {
-        if (!_isDetecting) {
-          _isDetecting = true;
-          _runModelOnFrame(image);
+        frameCounter++;
+        if (frameCounter % frameSkipRate == 0) {
+          if (!_isDetecting) {
+            _isDetecting = true;
+            _runModelOnFrame(image);
+          }
+          frameCounter = 0;
         }
       });
     }
