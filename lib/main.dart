@@ -228,6 +228,7 @@ class _ObjectDetectionViewState extends State<ObjectDetectionView> {
         frameCounter++;
         if (frameCounter % frameSkipRate == 0) {
           if (!_isDetecting) {
+            print("--> Trying to process a frame...");
             _isDetecting = true;
             _runModelOnFrame(image);
           }
@@ -255,6 +256,7 @@ class _ObjectDetectionViewState extends State<ObjectDetectionView> {
         _modelInputSize,
       ),
     );
+    print("--> Model processed. Found ${recognitions.length} recognitions.");
     if (mounted) {
       setState(() {
         _recognitions = recognitions;
