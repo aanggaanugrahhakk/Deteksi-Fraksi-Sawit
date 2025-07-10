@@ -1,11 +1,10 @@
-// ignore_for_file: avoid_print
-
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:camera/camera.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:tflite_flutter/tflite_flutter.dart';
 import 'package:image/image.dart' as img;
+import 'dart:math' as math;
 
 class IsolateData {
   final CameraImage cameraImage;
@@ -28,7 +27,7 @@ Future<List<Map<String, dynamic>>> runModelOnIsolate(IsolateData isolateData) as
   final outputShape = interpreter.getOutputTensor(0).shape;
   final outputTensor = List.filled(outputShape.reduce((a, b) => a * b), 0.0).reshape(outputShape);
   interpreter.run(inputTensor, outputTensor);
-  final recognitions = _postprocessOutput(outputTensor[0], isolateData.labels, inputSize);
+  final recognitions = _postprocessOutput(outputTensor[0], isolateData.labels);
   return recognitions;
 }
 
@@ -65,7 +64,7 @@ List<List<List<List<double>>>> _preprocessCameraImage(CameraImage image, int inp
   return [imageMatrix];
 }
 
-List<Map<String, dynamic>> _postprocessOutput(List<dynamic> output, List<String> labels, int modelInputSize) {
+List<Map<String, dynamic>> _postprocessOutput(List<dynamic> output, List<String> labels) {
   final List<List<double>> transposedOutput = List.generate(
     output[0].length, (i) => List.generate(output.length, (j) => output[j][i].toDouble())
   );
@@ -280,17 +279,7 @@ class _ObjectDetectionViewState extends State<ObjectDetectionView> {
           }
           return Scaffold(
             appBar: AppBar(title: const Text('Deteksi Fraksi Sawit')),
-            body: Stack(
-              children: [
-                CameraPreview(_cameraController!),
-                CustomPaint(
-                  painter: BoundingBoxPainter(
-                    recognitions: _recognitions,
-                    modelInputSize: _modelInputSize,
-                  ),
-                ),
-              ],
-            ),
+            body: buildCameraStack(context),
           );
         } else {
           return const Scaffold(
@@ -300,36 +289,70 @@ class _ObjectDetectionViewState extends State<ObjectDetectionView> {
       },
     );
   }
+
+  Widget buildCameraStack(BuildContext context) {
+    final size = MediaQuery.of(context).size;
+    if (_cameraController == null || !_cameraController!.value.isInitialized) {
+      return Container();
+    }
+    final previewSize = _cameraController!.value.previewSize!;
+    
+    final scale = math.max(size.width / previewSize.height, size.height / previewSize.width);
+
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        Center(
+          child: Transform.scale(
+            scale: scale,
+            child: Center(
+              child: CameraPreview(_cameraController!),
+            ),
+          ),
+        ),
+        CustomPaint(
+          painter: BoundingBoxPainter(
+            recognitions: _recognitions,
+            modelInputSize: _modelInputSize,
+            previewSize: previewSize,
+            screenSize: size,
+          ),
+        ),
+      ],
+    );
+  }
 }
 
 class BoundingBoxPainter extends CustomPainter {
   final List<Map<String, dynamic>> recognitions;
   final int modelInputSize;
+  final Size previewSize;
+  final Size screenSize;
 
-  BoundingBoxPainter({required this.recognitions, required this.modelInputSize});
+  BoundingBoxPainter({
+    required this.recognitions,
+    required this.modelInputSize,
+    required this.previewSize,
+    required this.screenSize,
+  });
 
   @override
   void paint(Canvas canvas, Size size) {
     if (recognitions.isEmpty) return;
+
+    final double scale = math.max(screenSize.width / previewSize.height, screenSize.height / previewSize.width);
+    final double offsetX = (screenSize.width - previewSize.height * scale) / 2;
+    final double offsetY = (screenSize.height - previewSize.width * scale) / 2;
     
-    // Gunakan size dari CustomPaint, yang seharusnya sama dengan layar
-    final double scaleX = size.width / modelInputSize;
-    final double scaleY = size.height / modelInputSize;
-
-    print("--- Repainting. Screen size: ${size.width}x${size.height}, Recognitions: ${recognitions.length} ---");
-
     for (var rec in recognitions) {
       final rect = rec['rect'] as Rect;
 
-      // Logika penskalaan yang lebih sederhana dan langsung
       final scaledRect = Rect.fromLTRB(
-        rect.left * scaleX,
-        rect.top * scaleY,
-        rect.right * scaleX,
-        rect.bottom * scaleY,
+        (1 - rect.bottom) * scale * previewSize.width + offsetY,
+        rect.left * scale * previewSize.height + offsetX,
+        (1 - rect.top) * scale * previewSize.width + offsetY,
+        rect.right * scale * previewSize.height + offsetX,
       );
-
-      print("--> Drawing box for '${rec['label']}' at Left: ${scaledRect.left.round()}, Top: ${scaledRect.top.round()}, Right: ${scaledRect.right.round()}, Bottom: ${scaledRect.bottom.round()}");
 
       final paint = Paint()
         ..style = PaintingStyle.stroke
