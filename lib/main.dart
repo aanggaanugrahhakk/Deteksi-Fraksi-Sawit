@@ -1,4 +1,4 @@
-// ignore_for_file: avoid_print, unnecessary_brace_in_string_interps
+// ignore_for_file: avoid_print
 
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
@@ -28,7 +28,7 @@ Future<List<Map<String, dynamic>>> runModelOnIsolate(IsolateData isolateData) as
   final outputShape = interpreter.getOutputTensor(0).shape;
   final outputTensor = List.filled(outputShape.reduce((a, b) => a * b), 0.0).reshape(outputShape);
   interpreter.run(inputTensor, outputTensor);
-  final recognitions = _postprocessOutput(outputTensor[0], isolateData.labels);
+  final recognitions = _postprocessOutput(outputTensor[0], isolateData.labels, inputSize);
   return recognitions;
 }
 
@@ -65,7 +65,7 @@ List<List<List<List<double>>>> _preprocessCameraImage(CameraImage image, int inp
   return [imageMatrix];
 }
 
-List<Map<String, dynamic>> _postprocessOutput(List<dynamic> output, List<String> labels) {
+List<Map<String, dynamic>> _postprocessOutput(List<dynamic> output, List<String> labels, int modelInputSize) {
   final List<List<double>> transposedOutput = List.generate(
     output[0].length, (i) => List.generate(output.length, (j) => output[j][i].toDouble())
   );
@@ -249,7 +249,6 @@ class _ObjectDetectionViewState extends State<ObjectDetectionView> {
     if (_interpreter == null || _isDetecting) return;
     
     _isDetecting = true;
-    print("--> Trying to process a frame...");
     
     final recognitions = await compute(
       runModelOnIsolate,
@@ -260,8 +259,6 @@ class _ObjectDetectionViewState extends State<ObjectDetectionView> {
         _modelInputSize,
       ),
     );
-    
-    print("--> Model processed. Found ${recognitions.length} recognitions.");
     
     if (mounted) {
       setState(() {
@@ -281,9 +278,6 @@ class _ObjectDetectionViewState extends State<ObjectDetectionView> {
           if (snapshot.hasError) {
             return ErrorApp("Gagal menginisialisasi: ${snapshot.error}");
           }
-          
-          final size = MediaQuery.of(context).size;
-          
           return Scaffold(
             appBar: AppBar(title: const Text('Deteksi Fraksi Sawit')),
             body: Stack(
@@ -292,8 +286,7 @@ class _ObjectDetectionViewState extends State<ObjectDetectionView> {
                 CustomPaint(
                   painter: BoundingBoxPainter(
                     recognitions: _recognitions,
-                    previewSize: _cameraController!.value.previewSize!,
-                    screenSize: size,
+                    modelInputSize: _modelInputSize,
                   ),
                 ),
               ],
@@ -311,35 +304,32 @@ class _ObjectDetectionViewState extends State<ObjectDetectionView> {
 
 class BoundingBoxPainter extends CustomPainter {
   final List<Map<String, dynamic>> recognitions;
-  final Size previewSize;
-  final Size screenSize;
+  final int modelInputSize;
 
-  BoundingBoxPainter({
-    required this.recognitions,
-    required this.previewSize,
-    required this.screenSize,
-  });
+  BoundingBoxPainter({required this.recognitions, required this.modelInputSize});
 
   @override
   void paint(Canvas canvas, Size size) {
-    print("--- Repainting. Recognitions: ${recognitions.length}, ScreenSize: $screenSize, PreviewSize: $previewSize ---");
-    
     if (recognitions.isEmpty) return;
-
-    final double scaleX = screenSize.width / previewSize.height;
-    final double scaleY = screenSize.height / previewSize.width;
     
+    // Gunakan size dari CustomPaint, yang seharusnya sama dengan layar
+    final double scaleX = size.width / modelInputSize;
+    final double scaleY = size.height / modelInputSize;
+
+    print("--- Repainting. Screen size: ${size.width}x${size.height}, Recognitions: ${recognitions.length} ---");
+
     for (var rec in recognitions) {
       final rect = rec['rect'] as Rect;
 
+      // Logika penskalaan yang lebih sederhana dan langsung
       final scaledRect = Rect.fromLTRB(
-        (1 - rect.bottom) * scaleY,
         rect.left * scaleX,
-        (1 - rect.top) * scaleY,
+        rect.top * scaleY,
         rect.right * scaleX,
+        rect.bottom * scaleY,
       );
 
-      print("--> Drawing box at: ${scaledRect}");
+      print("--> Drawing box for '${rec['label']}' at Left: ${scaledRect.left.round()}, Top: ${scaledRect.top.round()}, Right: ${scaledRect.right.round()}, Bottom: ${scaledRect.bottom.round()}");
 
       final paint = Paint()
         ..style = PaintingStyle.stroke
