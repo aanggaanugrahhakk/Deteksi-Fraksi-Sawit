@@ -1,3 +1,5 @@
+// ignore_for_file: avoid_print, unnecessary_brace_in_string_interps
+
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:camera/camera.dart';
@@ -247,6 +249,7 @@ class _ObjectDetectionViewState extends State<ObjectDetectionView> {
     if (_interpreter == null || _isDetecting) return;
     
     _isDetecting = true;
+    print("--> Trying to process a frame...");
     
     final recognitions = await compute(
       runModelOnIsolate,
@@ -257,6 +260,8 @@ class _ObjectDetectionViewState extends State<ObjectDetectionView> {
         _modelInputSize,
       ),
     );
+    
+    print("--> Model processed. Found ${recognitions.length} recognitions.");
     
     if (mounted) {
       setState(() {
@@ -317,6 +322,8 @@ class BoundingBoxPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
+    print("--- Repainting. Recognitions: ${recognitions.length}, ScreenSize: $screenSize, PreviewSize: $previewSize ---");
+    
     if (recognitions.isEmpty) return;
 
     final double scaleX = screenSize.width / previewSize.height;
@@ -331,6 +338,8 @@ class BoundingBoxPainter extends CustomPainter {
         (1 - rect.top) * scaleY,
         rect.right * scaleX,
       );
+
+      print("--> Drawing box at: ${scaledRect}");
 
       final paint = Paint()
         ..style = PaintingStyle.stroke
